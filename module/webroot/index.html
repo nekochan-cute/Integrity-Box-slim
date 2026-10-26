@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Integrity Box Slim</title>
+<style>
+:root {
+  --bg: #f4f4f6;
+  --card: #fff;
+  --text: #1c1c1e;
+  --muted: #6e6e73;
+  --line: #d8d8dc;
+  --accent: #2f6fde;
+  --ok: #1f8a3b;
+  --bad: #c62828;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111113;
+    --card: #1c1c1f;
+    --text: #ececef;
+    --muted: #9a9aa1;
+    --line: #333338;
+    --accent: #6c9cff;
+    --ok: #4cc26a;
+    --bad: #ff6b6b;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 16px 16px 48px;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 system-ui, sans-serif;
+}
+h1 { font-size: 20px; margin: 8px 0 16px; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+section {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 0 0 12px; }
+dt { color: var(--muted); }
+dd { margin: 0; overflow-wrap: anywhere; }
+button {
+  font: inherit;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+}
+button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+button:disabled { opacity: .5; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ok { color: var(--ok); }
+.bad { color: var(--bad); }
+.muted { color: var(--muted); font-size: 13px; }
+pre {
+  margin: 12px 0 0;
+  padding: 10px;
+  max-height: 320px;
+  overflow: auto;
+  background: var(--bg);
+  border-radius: 8px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+pre:empty { display: none; }
+textarea, input[type=text], select {
+  width: 100%;
+  font: 13px monospace;
+  padding: 8px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+select { width: auto; font-family: inherit; }
+textarea { min-height: 110px; }
+label.switch { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+label.switch:first-of-type { border-top: 0; }
+label.switch small { display: block; color: var(--muted); }
+.field { margin-bottom: 12px; }
+.field > span { display: block; margin-bottom: 4px; }
+ul.files { list-style: none; padding: 0; margin: 0 0 10px; }
+ul.files li { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+#unsupported { display: none; }
+</style>
+</head>
+<body>
+<h1>Integrity Box Slim</h1>
+
+<section id="unsupported">
+  <p class="bad">This page needs the WebUI API of KernelSU, APatch, MMRL or KsuWebUI Standalone.</p>
+</section>
+
+<section>
+  <h2>Status</h2>
+  <dl id="status"></dl>
+  <div class="row">
+    <button id="run-action">Run Action</button>
+    <button class="secondary" id="killpi">Restart Play Services</button>
+  </div>
+  <pre id="action-log"></pre>
+</section>
+
+<section>
+  <h2>Keybox</h2>
+  <dl id="keybox"></dl>
+  <div class="row">
+    <button class="secondary" id="check-revoked">Check revocation</button>
+    <button class="secondary" id="scan-keybox">Find keybox files</button>
+  </div>
+  <p class="muted" id="keybox-msg"></p>
+  <ul class="files" id="keybox-files"></ul>
+</section>
+
+<section>
+  <h2>Options</h2>
+  <div id="switches"></div>
+</section>
+
+<section>
+  <h2>Files</h2>
+  <div class="field">
+    <span>Blacklist <small class="muted">(left out of target.txt on Action)</small></span>
+    <textarea id="blacklist" spellcheck="false"></textarea>
+  </div>
+  <div class="field">
+    <span>target.txt <small class="muted">(rewritten on Action)</small></span>
+    <textarea id="target" spellcheck="false"></textarea>
+  </div>
+  <div class="field">
+    <span>VBMeta digest <small class="muted">(applied on reboot, empty to disable)</small></span>
+    <input type="text" id="hash" spellcheck="false" autocomplete="off">
+  </div>
+  <button id="save-files">Save</button>
+</section>
+
+<section>
+  <h2>PIF Advanced Settings</h2>
+  <div id="pif"></div>
+</section>
+
+<script>
+const MOD = '/data/adb/modules/playintegrityfix';
+const BOX = '/data/adb/Box-Brain';
+const TS = '/data/adb/tricky_store';
+const STATUS_URL = 'https://android.googleapis.com/attestation/status';
+const DOWNLOAD = `dl() { curl -fsL -o "$2" "$1" 2>/dev/null && return; for BB in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do [ -x $BB ] && $BB wget -q -T 15 -O "$2" "$1" && return; done; return 1; }`;
+
+const SWITCHES = [
+  [`${BOX}/keep-keybox`, 'Keep keybox', 'Action does not download the keybox'],
+  [`${BOX}/NoLineageProp`, 'Delete LineageOS props', 'Applied on reboot'],
+  [`${MOD}/skipmatchdevice`, 'Skip device matching', 'autopif4 picks a random Pixel instead of yours'],
+  [`${MOD}/skipdelprop`, 'Skip prop deletion', 'PIF keeps ro.build.selinux and verifiedboot error props'],
+  [`${MOD}/skippersistprop`, 'Skip persist props', 'PIF leaves ROM spoofing persist props alone'],
+  [`${MOD}/scripts-only-mode`, 'Scripts-only mode', 'No Zygisk spoofing, applied on next install'],
+];
+
+const PIF_SETTINGS = {
+  spoofBuild: [0, 1],
+  spoofProps: [0, 1],
+  spoofProvider: [0, 1],
+  spoofSignature: [0, 1],
+  spoofVendingFinger: [0, 1],
+  spoofVendingSdk: [0, 1],
+  verboseLogs: [0, 1, 2, 3, 100],
+};
+
+const $ = (id) => document.getElementById(id);
+
+function exec(cmd) {
+  return new Promise((resolve) => {
+    const cb = `exec_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    window[cb] = (errno, stdout, stderr) => {
+      delete window[cb];
+      resolve({ errno, stdout, stderr });
+    };
+    ksu.exec(cmd, '{}', cb);
+  });
+}
+
+function toast(msg) {
+  if (typeof ksu.toast === 'function') ksu.toast(msg);
+}
+
+// pass arbitrary text to the shell without quoting issues
+function b64(text) {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+}
+
+function parseKeyValues(text) {
+  const out = {};
+  for (const line of text.split('\n')) {
+    const i = line.indexOf('=');
+    if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+  }
+  return out;
+}
+
+function fillList(dl, rows) {
+  dl.replaceChildren();
+  for (const [name, value, cls] of rows) {
+    const dt = document.createElement('dt');
+    const dd = document.createElement('dd');
+    dt.textContent = name;
+    dd.textContent = value;
+    if (cls) dd.className = cls;
+    dl.append(dt, dd);
+  }
+}
+
+async function loadStatus() {
+  const { stdout } = await exec(`
+    grep '^version=' ${MOD}/module.prop
+    [ -f ${MOD}/disable ] && echo disabled=1
+    [ -f ${MOD}/scripts-only-mode ] && echo scriptsonly=1
+    [ -d /data/adb/modules/tricky_store ] && [ ! -f /data/adb/modules/tricky_store/disable ] && echo trickystore=1
+    grep -m1 '^FINGERPRINT=' ${MOD}/custom.pif.prop 2>/dev/null
+    grep -m1 'Estimated Expiry:' ${MOD}/custom.pif.prop 2>/dev/null | sed 's/.*: */expiry=/'
+    [ -f ${TS}/target.txt ] && echo "targets=$(grep -c . ${TS}/target.txt)"
+    [ -f ${TS}/security_patch.txt ] && echo "patch=$(grep . ${TS}/security_patch.txt | tr '\\n' ' ')"
+  `);
+  const s = parseKeyValues(stdout);
+  const expired = s.expiry && s.expiry !== 'Unknown' && new Date(s.expiry) < new Date();
+  fillList($('status'), [
+    ['Module', `${s.version || '?'}${s.disabled ? ' (disabled)' : ''}`, s.disabled ? 'bad' : ''],
+    ['Mode', s.scriptsonly ? 'Scripts-only' : 'Zygisk'],
+    ['Tricky Store', s.trickystore ? 'Enabled' : 'Not installed or disabled', s.trickystore ? 'ok' : 'bad'],
+    ['Fingerprint', s.FINGERPRINT || 'None, run Action', s.FINGERPRINT ? '' : 'bad'],
+    ['Expires', s.expiry ? `${s.expiry}${expired ? ' (expired, run Action)' : ''}` : '-', expired ? 'bad' : ''],
+    ['target.txt', s.targets ? `${s.targets} ${s.targets === '1' ? 'app' : 'apps'}` : 'Missing', s.targets ? '' : 'bad'],
+    ['Security patch', s.patch || '-'],
+  ]);
+}
+
+// serial number of a PEM certificate as lowercase hex without leading zeros
+function certSerial(pem) {
+  const der = Uint8Array.from(atob(pem.replace(/-----[^-]+-----|\s/g, '')), (c) => c.charCodeAt(0));
+  let pos = 0;
+  const header = () => {
+    const tag = der[pos++];
+    let len = der[pos++];
+    if (len & 0x80) {
+      const n = len & 0x7f;
+      len = 0;
+      for (let i = 0; i < n; i++) len = len * 256 + der[pos++];
+    }
+    return { tag, len };
+  };
+  header(); // Certificate
+  header(); // TBSCertificate
+  let field = header();
+  if (field.tag === 0xa0) { // explicit version
+    pos += field.len;
+    field = header();
+  }
+  return Array.from(der.slice(pos, pos + field.len), (b) => b.toString(16).padStart(2, '0'))
+    .join('').replace(/^0+/, '');
+}
+
+let keyboxSerials = [];
+
+async function loadKeybox() {
+  const { errno, stdout } = await exec(`cat ${TS}/keybox.xml`);
+  const certs = errno === 0 ? stdout.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) || [] : [];
+  const algorithms = [...stdout.matchAll(/<Key algorithm="(\w+)"/g)].map((m) => m[1]);
+  keyboxSerials = [];
+  for (const cert of certs) {
+    try { keyboxSerials.push(certSerial(cert)); } catch {}
+  }
+  $('check-revoked').disabled = keyboxSerials.length === 0;
+  fillList($('keybox'), certs.length ? [
+    ['Keys', algorithms.join(', ') || '?'],
+    ['Certificates', String(certs.length)],
+  ] : [['Keybox', 'Missing, run Action or load one', 'bad']]);
+}
+
+async function checkRevoked() {
+  $('check-revoked').disabled = true;
+  $('keybox-msg').textContent = 'Downloading revocation list ...';
+  const { errno, stdout } = await exec(`
+    ${DOWNLOAD}
+    F=$(mktemp)
+    dl ${STATUS_URL} $F || { rm -f $F; exit 1; }
+    for S in ${keyboxSerials.join(' ')}; do grep -q "\\"$S\\"" $F && echo $S; done
+    rm -f $F
+  `);
+  $('check-revoked').disabled = false;
+  if (errno !== 0) {
+    $('keybox-msg').textContent = 'Could not download the revocation list';
+    return;
+  }
+  const revoked = stdout.split('\n').filter(Boolean);
+  $('keybox-msg').textContent = revoked.length
+    ? `Revoked: ${revoked.length} of ${keyboxSerials.length} certificates are on Google's list`
+    : 'Not revoked: no certificate is on Google\'s list';
+  $('keybox-msg').className = revoked.length ? 'bad' : 'ok';
+}
+
+async function scanKeyboxes() {
+  $('keybox-msg').className = 'muted';
+  $('keybox-msg').textContent = 'Searching /sdcard ...';
+  const { stdout } = await exec(`
+    find /sdcard/ -maxdepth 3 -path /sdcard/Android -prune -o -name '*.xml' -size -256k -print 2>/dev/null |
+      while read -r F; do grep -q '</AndroidAttestation>' "$F" && echo "$F"; done
+  `);
+  const files = stdout.split('\n').filter(Boolean);
+  $('keybox-msg').textContent = files.length ? 'Loading a keybox also turns on "Keep keybox"' : 'No keybox files found in /sdcard';
+  const list = $('keybox-files');
+  list.replaceChildren();
+  for (const file of files) {
+    const li = document.createElement('li');
+    const name = document.createElement('span');
+    const button = document.createElement('button');
+    name.textContent = file;
+    button.className = 'secondary';
+    button.textContent = 'Load';
+    button.onclick = () => loadKeyboxFile(file);
+    li.append(name, button);
+    list.append(li);
+  }
+}
+
+async function loadKeyboxFile(file) {
+  const { errno, stdout } = await exec(`
+    F="$(echo ${b64(file)} | base64 -d)"
+    grep -q 'BEGIN CERTIFICATE' "$F" || { echo "Not a valid keybox"; exit 1; }
+    mkdir -p ${TS} ${BOX}
+    touch ${BOX}/keep-keybox
+    if cmp -s "$F" ${TS}/keybox.xml; then echo "Keybox is already loaded"; exit 0; fi
+    [ -f ${TS}/keybox.xml.bak ] || cp -f ${TS}/keybox.xml ${TS}/keybox.xml.bak 2>/dev/null
+    cp -f "$F" ${TS}/keybox.xml && chmod 644 ${TS}/keybox.xml || exit 1
+    rm -rf ${TS}/key_db/* ${TS}/persistent_keys/*
+    sh ${MOD}/killpi.sh >/dev/null 2>&1
+    echo "Keybox loaded"
+  `);
+  toast(stdout.trim() || (errno === 0 ? 'Done' : 'Failed'));
+  $('keybox-files').replaceChildren();
+  $('keybox-msg').textContent = '';
+  await Promise.all([loadKeybox(), loadSwitches()]);
+}
+
+async function loadSwitches() {
+  const { stdout } = await exec(SWITCHES.map(([path], i) => `[ -e ${path} ] && echo ${i}`).join('\n'));
+  const enabled = new Set(stdout.split('\n').map(Number));
+  const box = $('switches');
+  box.replaceChildren();
+  SWITCHES.forEach(([path, title, note], i) => {
+    const label = document.createElement('label');
+    const text = document.createElement('span');
+    const small = document.createElement('small');
+    const input = document.createElement('input');
+    label.className = 'switch';
+    text.textContent = title;
+    small.textContent = note;
+    text.append(small);
+    input.type = 'checkbox';
+    input.checked = enabled.has(i);
+    input.onchange = async () => {
+      const { errno } = await exec(input.checked ? `mkdir -p "$(dirname ${path})" && touch ${path}` : `rm -f ${path}`);
+      if (errno !== 0) {
+        input.checked = !input.checked;
+        toast('Failed');
+      }
+    };
+    label.append(text, input);
+    box.append(label);
+  });
+}
+
+async function loadFiles() {
+  const read = async (file) => {
+    const { errno, stdout } = await exec(`cat ${file}`);
+    return errno === 0 ? stdout : '';
+  };
+  const [blacklist, target, hash] = await Promise.all([
+    read(`${BOX}/blacklist.txt`), read(`${TS}/target.txt`), read(`${BOX}/hash.txt`),
+  ]);
+  $('blacklist').value = blacklist;
+  $('target').value = target;
+  $('hash').value = hash.trim();
+}
+
+async function saveFiles() {
+  const hash = $('hash').value.replace(/\s/g, '').toLowerCase();
+  if (hash && !/^[0-9a-f]{64}$/.test(hash)) {
+    toast('VBMeta digest must be 64 hex characters');
+    return;
+  }
+  const lines = (text) => text.split('\n').map((l) => l.trim()).filter(Boolean).join('\n');
+  const write = (file, text) => text
+    ? `echo ${b64(text + '\n')} | base64 -d > ${file}`
+    : `rm -f ${file}`;
+  const { errno } = await exec(`
+    mkdir -p ${BOX} ${TS}
+    ${write(`${BOX}/blacklist.txt`, lines($('blacklist').value))}
+    ${write(`${TS}/target.txt`, lines($('target').value))}
+    ${write(`${BOX}/hash.txt`, hash)}
+  `);
+  toast(errno === 0 ? 'Saved' : 'Failed to save');
+  await Promise.all([loadFiles(), loadStatus()]);
+}
+
+async function loadPif() {
+  const box = $('pif');
+  const { errno, stdout } = await exec(`cat ${MOD}/custom.pif.prop`);
+  box.replaceChildren();
+  if (errno !== 0) {
+    box.innerHTML = '<p class="muted">No custom.pif.prop yet, run Action first.</p>';
+    return;
+  }
+  const values = parseKeyValues(stdout);
+  for (const [key, choices] of Object.entries(PIF_SETTINGS)) {
+    const label = document.createElement('label');
+    const select = document.createElement('select');
+    label.className = 'switch';
+    label.textContent = key;
+    const current = values[key] ?? '';
+    const options = choices.map(String);
+    if (!options.includes(current)) options.push(current);
+    for (const choice of options) {
+      const option = document.createElement('option');
+      option.value = option.textContent = choice;
+      select.append(option);
+    }
+    select.value = current;
+    select.onchange = () => savePif(key, select.value);
+    label.append(select);
+    box.append(label);
+  }
+  const note = document.createElement('p');
+  note.className = 'muted';
+  note.textContent = 'Changes apply right away; Play Services and the Play Store are restarted.';
+  box.append(note);
+}
+
+async function savePif(key, value) {
+  if (!/^[\w./:-]+$/.test(value)) return;
+  const { errno } = await exec(`
+    P=${MOD}/custom.pif.prop
+    if grep -q '^${key}=' $P; then
+      sed -i 's|^${key}=.*|${key}=${value}|' $P
+    else
+      echo '${key}=${value}' >> $P
+    fi
+    sh ${MOD}/killpi.sh >/dev/null 2>&1
+  `);
+  toast(errno === 0 ? `${key}=${value}` : 'Failed');
+}
+
+async function runAction() {
+  const button = $('run-action');
+  button.disabled = true;
+  $('action-log').textContent = 'Running ...';
+  const { stdout, stderr } = await exec(`sh ${MOD}/action.sh 2>&1`);
+  $('action-log').textContent = (stdout + stderr).trim();
+  button.disabled = false;
+  await Promise.all([loadStatus(), loadKeybox(), loadFiles(), loadPif()]);
+}
+
+if (typeof ksu === 'undefined') {
+  $('unsupported').style.display = 'block';
+} else {
+  $('run-action').onclick = runAction;
+  $('killpi').onclick = async () => {
+    await exec(`sh ${MOD}/killpi.sh`);
+    toast('Restarted');
+  };
+  $('check-revoked').onclick = checkRevoked;
+  $('scan-keybox').onclick = scanKeyboxes;
+  $('save-files').onclick = saveFiles;
+  loadStatus();
+  loadKeybox();
+  loadSwitches();
+  loadFiles();
+  loadPif();
+}
+</script>
+</body>
+</html>
