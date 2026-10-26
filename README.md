@@ -22,6 +22,12 @@ Nothing is downloaded during installation. No fingerprint is bundled, so spoofin
 
 An existing `custom.pif.prop` from Integrity Box is kept; its `spoofPixel` and `spoofApps` entries are removed since upstream PIF does not use them.
 
+## WebUI
+
+KernelSU, APatch and MMRL open it from the module list. On Magisk use [KsuWebUI Standalone](https://github.com/5ec1cff/KsuWebUIStandalone) or MMRL.
+
+It shows the module, fingerprint and keybox state, runs the Action, checks the keybox against Google's revocation list, loads a keybox file from `/sdcard` (which turns on `keep-keybox`), and edits the options below, `target.txt` and PIF's Advanced Settings.
+
 ## Options
 
 Files in `/data/adb/Box-Brain`:
@@ -41,7 +47,7 @@ The first `keybox.xml` and `target.txt` that get replaced are saved as `.bak` an
 ## Differences from Integrity Box
 
 - Upstream PlayIntegrityFork instead of the MeowDump fork, so no `spoofPixel`, per-app spoofing or pause switch
-- No WebUI, images, translations or install animation
+- A single-page WebUI instead of the 24-page one, no images, translations or install animation
 - No Telegram link opened on install, no removal of other modules
 - No DNS changes, direct IP downloads or `setenforce 0` while fetching the keybox
 - No forced `system.prop`, root manager file mover, TWRP folder renamer or background daemon
