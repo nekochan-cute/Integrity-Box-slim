@@ -1,12 +1,6 @@
 id=playintegrityfix
-name=.𝙄𝙣𝙩𝙚𝙜𝙧𝙞𝙩𝙮 𝘽𝙤𝙭 📦
-version=v42
-versionCode=42000
-author=𝗠𝗘𝗢𝗪𝗻𝗮 💅
-support=https://t.me/MeowDump
-donate=https://MeowDump.github.io
-actionIcon=key.png
-webuiIcon=box.png
-updateJson=https://raw.githubusercontent.com/MeowDump/Integrity-Box/refs/heads/main/release.json
-banner=https://4kwallpapers.com/images/walls/thumbs_2t/19472.jpg
-description=Built to improve Play Integrity compatibility and hide root detection
+name=Integrity Box Slim
+version=v45-slim
+versionCode=45000
+author=MeowDump, osm0sis & chiteroman @ xda-developers
+description=Play Integrity Fork with Tricky Store keybox and target.txt setup
