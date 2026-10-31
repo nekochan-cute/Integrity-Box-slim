@@ -38,9 +38,18 @@ The boot service restarts DroidGuard and the Play Store only if this setup chang
 
 KernelSU, APatch and MMRL open it from the module list. On Magisk use [KsuWebUI Standalone](https://github.com/5ec1cff/KsuWebUIStandalone) or MMRL.
 
-It shows the module, fingerprint and keybox state, runs the Action, checks the keybox against Google's revocation list, loads a keybox file from `/sdcard` (which turns on `keep-keybox`), and edits the options below, `target.txt` and PIF's Advanced Settings.
+It shows the module, fingerprint and keybox state, runs the Action, checks the keybox against Google's revocation list, loads a keybox file from `/sdcard` (which turns on `keep-keybox`), applies the Hide My Applist config, and edits the options below, `target.txt` and PIF's Advanced Settings.
 
-The Action and the revocation check run through the manager's `ksu.spawn`, so the page stays responsive and the Action log is shown while it runs. Other controls are disabled until the Action finishes. Managers without `ksu.spawn` fall back to `ksu.exec`, which blocks the page until the command ends.
+The Action, the revocation check and the HMA config run through the manager's `ksu.spawn`, so the page stays responsive and the Action log is shown while it runs. Other controls are disabled until the Action finishes. Managers without `ksu.spawn` fall back to `ksu.exec`, which blocks the page until the command ends.
+
+## Hide My Applist
+
+`hma-config.json` is Integrity Box's Hide My Applist config (Meow Blacklist / Whitelist templates). The WebUI's "Apply HMA config" runs `hma.sh`, which picks the first installed app of HMA-OSS (`org.frknkrc44.hma_oss`), `com.google.android.hmal` and Hide My Applist (`com.tsng.hidemyapplist`):
+
+- Hide My Applist and `com.google.android.hmal` load `files/config.json` from their app data on launch and sync it to their service. The script writes the config there, launches the app and waits until the app has rewritten the file. If it does not, the previous config is restored.
+- HMA-OSS keeps the config in its service directory `/data/misc/hide_my_applist_*`. The service reads it on boot, so the config applies after a reboot; long-pressing the status card in HMA-OSS reloads it right away.
+
+The current config is first saved as `/data/adb/HMA/config_<date>.json`, which is kept on uninstall. The new config is written into the existing file so it keeps its owner and SELinux label. If no HMA app is installed, the HMA-OSS releases page is opened. HMA itself still has to be enabled in LSPosed.
 
 ## Options
 
@@ -63,7 +72,7 @@ The first `keybox.xml` and `target.txt` that get replaced are saved as `.bak` an
 - Upstream PlayIntegrityFork instead of the MeowDump fork, so no `spoofPixel`, per-app spoofing or pause switch
 - A single-page WebUI instead of the 24-page one, no images, translations or install animation
 - No Telegram link opened on install, no removal of other modules
-- No DNS changes, direct IP downloads or `setenforce 0` while fetching the keybox
+- No DNS changes, direct IP downloads or `setenforce 0` while fetching the keybox or applying the HMA config
 - No forced `system.prop`, root manager file mover, TWRP folder renamer or background daemon
 - No `updateJson`, so root managers do not offer the full Integrity Box as an update
 

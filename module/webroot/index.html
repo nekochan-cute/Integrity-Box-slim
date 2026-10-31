@@ -148,6 +148,14 @@ ul.files li { display: flex; justify-content: space-between; gap: 8px; align-ite
   <div id="pif"></div>
 </section>
 
+<section>
+  <h2>Hide My Applist</h2>
+  <dl id="hma"></dl>
+  <button id="apply-hma">Apply HMA config</button>
+  <p class="muted">Replaces the HMA config with Integrity Box's templates. The current config is backed up to /data/adb/HMA.</p>
+  <pre id="hma-log"></pre>
+</section>
+
 <script>
 const MOD = '/data/adb/modules/playintegrityfix';
 const BOX = '/data/adb/Box-Brain';
@@ -510,6 +518,32 @@ async function runAction() {
   await Promise.all([loadStatus(), loadKeybox(), loadFiles(), loadPif()]);
 }
 
+async function loadHma() {
+  const s = parseKeyValues((await exec(`sh ${MOD}/hma.sh --status`)).stdout);
+  let config;
+  if (s.config) {
+    const { errno, stdout } = await exec(`cat ${s.config}`);
+    try { if (errno === 0) config = JSON.parse(stdout); } catch {}
+  }
+  fillList($('hma'), [
+    ['App', s.app || 'Not installed', s.app ? '' : 'bad'],
+    ['Templates', config ? Object.keys(config.templates || {}).join(', ') || 'None' : '-'],
+    ['Configured apps', config ? String(Object.keys(config.scope || {}).length) : '-'],
+  ]);
+}
+
+async function applyHma() {
+  $('apply-hma').disabled = true;
+  let errno;
+  try {
+    errno = await runLogged($('hma-log'), `sh ${MOD}/hma.sh`);
+  } finally {
+    $('apply-hma').disabled = false;
+  }
+  toast(errno === 0 ? 'HMA config applied' : 'Failed');
+  await loadHma();
+}
+
 if (typeof ksu === 'undefined') {
   $('unsupported').style.display = 'block';
 } else {
@@ -521,11 +555,13 @@ if (typeof ksu === 'undefined') {
   $('check-revoked').onclick = checkRevoked;
   $('scan-keybox').onclick = scanKeyboxes;
   $('save-files').onclick = saveFiles;
+  $('apply-hma').onclick = applyHma;
   loadStatus();
   loadKeybox();
   loadSwitches();
   loadFiles();
   loadPif();
+  loadHma();
 }
 </script>
 </body>
