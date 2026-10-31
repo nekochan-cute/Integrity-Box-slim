@@ -1,6 +1,8 @@
 #!/system/bin/sh
 MODPATH="${0%/*}"
 BOX=/data/adb/Box-Brain
+TS=/data/adb/tricky_store
+TS_MODULE=/data/adb/modules/tricky_store
 CHANGED=0
 
 # Scripts-only mode must leave the ROM's own spoofing in control.
@@ -22,6 +24,29 @@ if [ ! -f "$MODPATH/skippersistprop" ]; then
                 CHANGED=1
                 ;;
         esac
+    fi
+fi
+
+if [ -d "$TS_MODULE" ] && [ ! -f "$TS_MODULE/disable" ] &&
+   [ ! -f "$TS_MODULE/remove" ] && [ -s "$TS/keybox.xml" ]; then
+    PIF="$MODPATH/custom.pif.prop"
+    if [ ! -f "$PIF" ] && [ -f "$MODPATH/custom.pif.json" ]; then
+        sh "$MODPATH/migrate.sh" --install --force --advanced --prop "$MODPATH/custom.pif.json" || exit 1
+        mv -f "$MODPATH/custom.pif.json" "$MODPATH/custom.pif.json.bak" || exit 1
+        CHANGED=1
+    fi
+    if [ -f "$PIF" ]; then
+        # Keep AndroidKeyStore available for Tricky Store hardware attestation.
+        if grep -q '^[[:space:]]*spoofProvider[[:space:]]*=' "$PIF"; then
+            if grep '^[[:space:]]*spoofProvider[[:space:]]*=' "$PIF" | grep -qvE '^[[:space:]]*spoofProvider[[:space:]]*=[[:space:]]*0[[:space:]]*(#.*)?$'; then
+                sed -i 's/^[[:space:]]*spoofProvider[[:space:]]*=.*/spoofProvider=0/' "$PIF" || exit 1
+                CHANGED=1
+            fi
+        else
+            printf '\nspoofProvider=0\n' >> "$PIF" || exit 1
+            CHANGED=1
+        fi
+
     fi
 fi
 
