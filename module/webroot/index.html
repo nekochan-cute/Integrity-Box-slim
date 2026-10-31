@@ -176,6 +176,7 @@ const PIF_SETTINGS = {
 
 const $ = (id) => document.getElementById(id);
 
+// ksu.exec blocks the page until the command exits, so it is only used for quick commands
 function exec(cmd) {
   return new Promise((resolve) => {
     const cb = `exec_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -185,6 +186,47 @@ function exec(cmd) {
     };
     ksu.exec(cmd, '{}', cb);
   });
+}
+
+// ksu.spawn returns right away and streams the output line by line
+function spawn(cmd, onLine = () => {}) {
+  if (typeof ksu.spawn !== 'function') return exec(cmd);
+  return new Promise((resolve) => {
+    const cb = `spawn_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const stream = (lines) => ({
+      emit(event, line) {
+        if (event !== 'data') return;
+        lines.push(line);
+        onLine(line);
+      },
+    });
+    const stdout = [];
+    const stderr = [];
+    window[cb] = {
+      stdout: stream(stdout),
+      stderr: stream(stderr),
+      emit(event, code) {
+        if (event !== 'exit') return;
+        delete window[cb];
+        resolve({ errno: code, stdout: stdout.join('\n'), stderr: stderr.join('\n') });
+      },
+    };
+    ksu.spawn(cmd, '[]', '{}', cb);
+  });
+}
+
+// show streamed lines in a <pre> while a long command runs
+async function runLogged(pre, cmd) {
+  let streamed = false;
+  pre.textContent = 'Running ...';
+  const { errno, stdout } = await spawn(`${cmd} 2>&1`, (line) => {
+    if (!streamed) pre.textContent = '';
+    streamed = true;
+    pre.textContent += `${line}\n`;
+    pre.scrollTop = pre.scrollHeight;
+  });
+  pre.textContent = stdout.trim() || (errno === 0 ? 'Done' : `Failed (${errno})`);
+  return errno;
 }
 
 function toast(msg) {
@@ -286,7 +328,7 @@ async function loadKeybox() {
 async function checkRevoked() {
   $('check-revoked').disabled = true;
   $('keybox-msg').textContent = 'Downloading revocation list ...';
-  const { errno, stdout } = await exec(`
+  const { errno, stdout } = await spawn(`
     ${DOWNLOAD}
     F=$(mktemp)
     dl ${STATUS_URL} $F || { rm -f $F; exit 1; }
@@ -457,12 +499,14 @@ async function savePif(key, value) {
 }
 
 async function runAction() {
-  const button = $('run-action');
-  button.disabled = true;
-  $('action-log').textContent = 'Running ...';
-  const { stdout, stderr } = await exec(`sh ${MOD}/action.sh 2>&1`);
-  $('action-log').textContent = (stdout + stderr).trim();
-  button.disabled = false;
+  // keep the page responsive, but do not let other controls edit files the Action rewrites
+  const controls = [...document.querySelectorAll('button, input, select, textarea')].filter((el) => !el.disabled);
+  controls.forEach((el) => { el.disabled = true; });
+  try {
+    await runLogged($('action-log'), `sh ${MOD}/action.sh`);
+  } finally {
+    controls.forEach((el) => { el.disabled = false; });
+  }
   await Promise.all([loadStatus(), loadKeybox(), loadFiles(), loadPif()]);
 }
 

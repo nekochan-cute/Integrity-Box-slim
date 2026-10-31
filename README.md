@@ -40,6 +40,8 @@ KernelSU, APatch and MMRL open it from the module list. On Magisk use [KsuWebUI 
 
 It shows the module, fingerprint and keybox state, runs the Action, checks the keybox against Google's revocation list, loads a keybox file from `/sdcard` (which turns on `keep-keybox`), and edits the options below, `target.txt` and PIF's Advanced Settings.
 
+The Action and the revocation check run through the manager's `ksu.spawn`, so the page stays responsive and the Action log is shown while it runs. Other controls are disabled until the Action finishes. Managers without `ksu.spawn` fall back to `ksu.exec`, which blocks the page until the command ends.
+
 ## Options
 
 Files in `/data/adb/Box-Brain`:
