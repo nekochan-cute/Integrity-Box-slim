@@ -60,4 +60,6 @@ fi
 # Compact property area to hide modifications on supported root solutions
 resetprop --compact >/dev/null 2>&1 || true
 
+sh "$MODPATH/integrity_setup.sh" --restart || echo "! Failed to configure the integrity setup"
+
 }&

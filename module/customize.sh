@@ -74,6 +74,9 @@ if [ -f "$MODPATH/custom.pif.json" ]; then
     fi
 fi
 
+# Apply Slim's Tricky Store settings after restoring/migrating the PIF config.
+sh "$MODPATH/integrity_setup.sh" || abort "! Failed to configure the integrity setup"
+
 # Clean up any leftover files from previous deprecated methods
 rm -f /data/data/com.google.android.gms/cache/pif.prop /data/data/com.google.android.gms/pif.prop \
     /data/data/com.google.android.gms/cache/pif.json /data/data/com.google.android.gms/pif.json

@@ -66,10 +66,10 @@ echo "- Added $(wc -l < $TS/target.txt) apps to target.txt"
 
 if [ -f $MODPATH/autopif4.sh ]; then
     [ -f $MODPATH/skipmatchdevice ] || MATCHFLAG=-m
-    sh $MODPATH/autopif4.sh $MATCHFLAG || { RC=1; sh $MODPATH/killpi.sh; }
-else
-    sh $MODPATH/killpi.sh
+    sh $MODPATH/autopif4.sh $MATCHFLAG || RC=1
 fi
+sh "$MODPATH/integrity_setup.sh" || RC=1
+sh "$MODPATH/killpi.sh"
 
 [ $RC -eq 0 ] && echo -e "\nDone!"
 
