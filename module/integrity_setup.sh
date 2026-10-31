@@ -47,6 +47,40 @@ if [ -d "$TS_MODULE" ] && [ ! -f "$TS_MODULE/disable" ] &&
             CHANGED=1
         fi
 
+        PATCH=$(grep -m1 '^SECURITY_PATCH=' "$PIF" | cut -d= -f2 | cut -d'#' -f1 | tr -d '[:space:]')
+        if printf '%s\n' "$PATCH" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+            PATCH_FILE="$TS/security_patch.txt"
+            if [ ! -s "$PATCH_FILE" ]; then
+                {
+                    printf 'all=%s\n' "$PATCH"
+                    if [ -f "$TS_MODULE/libTrickyStoreOSS.so" ] || [ -f "$TS_MODULE/libTEESimulator.so" ]; then
+                        printf '\n[com.google.android.gms]\nsystem=no\n'
+                    fi
+                } > "$PATCH_FILE" || exit 1
+                CHANGED=1
+            else
+                # Stale OMK/TEE-SIM data must not skip patch updates. Only update
+                # global dates, preserving device_default and per-app overrides.
+                PATCH_TMP="$PATCH_FILE.tmp.$$"
+                trap 'rm -f "$PATCH_TMP"' EXIT
+                awk -v patch="$PATCH" '
+                    /^[[:space:]]*\[/ { section=1 }
+                    !section && /^[[:space:]]*all[[:space:]]*=/ && $0 !~ /device_default/ {
+                        print "all=" patch; next
+                    }
+                    !section && /^[0-9][0-9][0-9][0-9]-?[0-9][0-9]-?[0-9][0-9]$/ {
+                        if (index($0, "-")) print patch
+                        else { value=patch; gsub(/-/, "", value); print value }
+                        next
+                    }
+                    { print }
+                ' "$PATCH_FILE" > "$PATCH_TMP" || exit 1
+                if ! cmp -s "$PATCH_TMP" "$PATCH_FILE"; then
+                    cat "$PATCH_TMP" > "$PATCH_FILE" || exit 1
+                    CHANGED=1
+                fi
+            fi
+        fi
     fi
 fi
 
