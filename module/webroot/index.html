@@ -350,7 +350,7 @@ async function loadKeyboxFile(file) {
 
 async function loadSwitches() {
   const { stdout } = await exec(SWITCHES.map(([path], i) => `[ -e ${path} ] && echo ${i}`).join('\n'));
-  const enabled = new Set(stdout.split('\n').map(Number));
+  const enabled = new Set(stdout.split('\n').filter(Boolean).map(Number));
   const box = $('switches');
   box.replaceChildren();
   SWITCHES.forEach(([path, title, note], i) => {
