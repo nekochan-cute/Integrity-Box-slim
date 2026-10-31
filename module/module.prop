@@ -1,6 +1,6 @@
 id=playintegrityfix
 name=Integrity Box Slim
-version=v45-slim
-versionCode=45000
+version=v45-slim.1
+versionCode=45001
 author=MeowDump, osm0sis & chiteroman @ xda-developers
 description=Play Integrity Fork with Tricky Store keybox and target.txt setup
