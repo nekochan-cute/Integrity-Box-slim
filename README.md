@@ -85,6 +85,8 @@ sh build.sh --gradle
 
 Needs JDK 21 and the Android SDK. The zip is written to `out/`. GitHub Actions builds the same way.
 
+Pushing a tag named after `module.prop`'s version (for example `v45-slim.2`) builds the zip on GitHub Actions and publishes it as a GitHub release, using that version's entry below as the release notes.
+
 ## Changes
 
 ### v45-slim.2

@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags: 'v*-slim*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out
+      uses: actions/checkout@v7
+      with:
+        submodules: 'recursive'
+
+    - name: Check version
+      run: |
+        VERSION=$(grep '^version=' module/module.prop | cut -d= -f2)
+        [ "$VERSION" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME does not match module.prop version $VERSION"; exit 1; }
+
+    - name: Set up JDK
+      uses: actions/setup-java@v6
+      with:
+        distribution: 'temurin'
+        java-version: 21
+
+    - name: Build
+      run: sh build.sh --gradle
+
+    - name: Publish release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        awk -v head="### $GITHUB_REF_NAME" '$0 == head { found = 1; next } /^##/ { found = 0 } found' README.md > notes.md
+        grep -q . notes.md || { echo "No README changelog entry for $GITHUB_REF_NAME"; exit 1; }
+        gh release create "$GITHUB_REF_NAME" "out/Integrity-Box-Slim-$GITHUB_REF_NAME.zip" --title "$GITHUB_REF_NAME" --notes-file notes.md
