@@ -87,6 +87,11 @@ Needs JDK 21 and the Android SDK. The zip is written to `out/`. GitHub Actions b
 
 ## Changes
 
+### v45-slim.2
+
+- Added Integrity Box's Hide My Applist config with an "Apply HMA config" WebUI button that also supports Hide My Applist (`com.tsng.hidemyapplist`).
+- Kept the WebUI responsive while the Action, the revocation check and the HMA config run, showing the Action log live.
+
 ### v45-slim.1
 
 - Fixed Keep keybox appearing enabled when all option flags are absent.
